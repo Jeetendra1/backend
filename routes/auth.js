@@ -2,10 +2,11 @@ const express = require("express");
 const User = require("../models/User");
 const router = express.Router();
 const { body, validationResult } = require("express-validator");
-const bcrypt = require('bcryptjs');
-var jwt = require('jsonwebtoken');
+const bcrypt = require("bcryptjs");
+var jwt = require("jsonwebtoken");
+const fetchUser = require('../middleware/fetchUser');
 
-const JWT_SECRET_KEY = 'dabli_priya';
+const JWT_SECRET_KEY = "dabli_priya";
 
 //Create user using : POST '/api/auth/createuser'. Doesn't require auth. No login required
 router.post(
@@ -39,12 +40,12 @@ router.post(
       });
       const data = {
         user: {
-          id: user.id
-        }
-      }
+          id: user.id,
+        },
+      };
       var auttoken = jwt.sign(data, JWT_SECRET_KEY);
 
-      res.json({auttoken});
+      res.json({ auttoken });
     } catch (error) {
       res.status(500).send(error.msg);
     }
@@ -53,4 +54,68 @@ router.post(
   }
 );
 
+//Authenticate user using : POST '/api/auth/login'. No login required
+
+router.post(
+  "/login",
+  [
+    body("email", "Enter valid email").isEmail(),
+    body("password", "Password can not be blank").exists(),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { email, password } = req.body;
+
+    try {
+      let user = await User.findOne({ email });
+      if (!user) {
+        res
+          .status(400)
+          .json({ error: "Please try to login with correct credentials." });
+      }
+      const passwordCompare = await bcrypt.compare(password, user.password);
+      if (!passwordCompare) {
+        res
+          .status(400)
+          .json({ error: "Please try to login with correct credentials." });
+      }
+
+      const userPayload = {
+        user: {
+          id: user.id,
+        },
+      };
+
+      const authToken = jwt.sign(userPayload, JWT_SECRET_KEY);
+      res.json({ authToken });
+    } catch (error) {
+      res.status(500).send(error.msg);
+    }
+  }
+);
+
+//Route3: Get logged in user details : POST '/api/auth/getUser'. L ogin required
+
+router.post("/getuser", fetchUser, async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    userId = req.user.id;
+    const user = await User.findById(userId).select("-password");
+    console.log('user', user);
+    if (user) {
+      res.send(user);
+    }
+  } catch (error) {
+    console.log(error.msg);
+    res.status(500).send(error.msg);
+  }
+});
 module.exports = router;
